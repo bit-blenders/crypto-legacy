@@ -16,101 +16,91 @@ contract  Legacy is ReentrancyGuard {
 
     struct Asset {
         address assetAddress;
+        uint32 expiresAt;
         uint allowance;
         Recepient[] recepients;
     }
 
-    mapping(address => Asset[]) private _wills;
-    mapping(address => uint32) private _expiresAt;
+    mapping(address => mapping(address => Asset)) private _wills;
+    // mapping(address => uint32) private _expiresAt;
 
     event WillCreated(
         address indexed testator, 
+        address assestAddress,
         uint32 createdAt, 
         uint32 expiresAt
     );
     event WillExecuted(
         address indexed testator, 
-        uint32 expiredAt,
+        address assetAddress,
+        uint32 expiresAt,
         uint32 executedAt
     );
 
-    function createWill(Asset[] memory assets, uint32 expiresAt) external nonReentrant {
-        require(expiresAt > uint32(block.timestamp), "expire time too small");
-        validateAsset(assets);
+    function createWill(Asset memory asset) external nonReentrant {
+        require(asset.expiresAt > uint32(block.timestamp), "expire time too small");
+        validateAsset(asset);
 
-        Asset[] storage wills = _wills[msg.sender];
-        _expiresAt[msg.sender] = expiresAt;
-
-        for(uint i = 0; i < assets.length; i++) {
-            Recepient[] storage recep = wills[i].recepients;
-            for(uint j = 0; j < assets[i].recepients.length; j++) {
-                Recepient memory rec = assets[i].recepients[j];
-                recep[j] = Recepient({
-                    receiver: rec.receiver,
-                    sharePercentBps: rec.sharePercentBps,
-                    denominator: rec.denominator,
-                    id: rec.id
-                });
-            }
-            wills[i] = Asset({
-                assetAddress: assets[i].assetAddress,
-                allowance: assets[i].allowance,
-                recepients: recep
-            });
+        Asset storage will = _wills[msg.sender][asset.assetAddress];
+        for(uint j = 0; j < asset.recepients.length; j++) {
+            will.recepients.push(Recepient({
+                receiver: asset.recepients[j].receiver,
+                sharePercentBps: asset.recepients[j].sharePercentBps,
+                denominator: asset.recepients[j].denominator,
+                id: asset.recepients[j].id
+            }));
         }
-
-        emit WillCreated(msg.sender, uint32(block.timestamp), expiresAt);
+        will.assetAddress = asset.assetAddress;
+        will.expiresAt = asset.expiresAt;
+        will.allowance = asset.allowance;
+        
+        emit WillCreated(msg.sender, asset.assetAddress,uint32(block.timestamp), asset.expiresAt);
     }
 
-    function executeWill(address testator) external nonReentrant {
-        Asset[] memory wills = _wills[testator];
-        uint32 expiredAt = _expiresAt[testator];
+    function executeWill(address testator, address assetAddress) external nonReentrant {
+        Asset memory will = _wills[testator][assetAddress];
 
-        for(uint i = 0; i < wills.length; i++) {
-            Asset memory asset = wills[i];
-            if(
-                IERC165(asset.assetAddress).supportsInterface(
-                    type(IERC721).interfaceId
-                )
-            ) {
-                _handleERC721Asset(testator, asset);
+
+        if(
+            IERC165(will.assetAddress).supportsInterface(
+                type(IERC721).interfaceId
+            )
+        ) {
+            _handleERC721Asset(testator, will);
+        }
+        else {
+            _handleERC20Asset(testator, will);
+        }
+
+        delete _wills[testator][assetAddress];
+
+        emit WillExecuted(testator, assetAddress,uint32(block.timestamp), will.expiresAt);
+    }
+
+    function validateAsset(Asset memory asset) internal view {
+
+        require(asset.assetAddress != address(0), "zero asset address");
+        require(asset.assetAddress.code.length > 0, "address not contract");
+
+        for(uint j = 0; j < asset.recepients.length; j++) {
+            Recepient memory recepient = asset.recepients[j];
+            require(
+                recepient.receiver != address(0), 
+                "zero recepient address"
+            );
+            if(IERC165(asset.assetAddress).supportsInterface(
+                type(IERC721).interfaceId
+            )) {
+                require(recepient.id != 0, "zero token id");
+                require(
+                    msg.sender == IERC721(asset.assetAddress).ownerOf(
+                        recepient.id
+                    ), "caller not token owner"
+                );
             }
             else {
-                _handleERC20Asset(testator, asset);
-            }
-        }
-
-        delete _wills[testator];
-        delete _expiresAt[testator];
-
-        emit WillExecuted(testator, uint32(block.timestamp), expiredAt);
-    }
-
-    function validateAsset(Asset[] memory assets) internal {
-        for(uint i = 0; i < assets.length; i++) {
-            require(assets[i].assetAddress != address(0), "zero assets address");
-            require(assets[i].assetAddress.code.length > 0, "address not contract");
-
-            for(uint j = 0; j < assets[i].recepients.length; j++) {
-                Recepient memory recepient = assets[i].recepients[j];
-                require(
-                    recepient.receiver != address(0), 
-                    "zero recepient address"
-                );
-                if(IERC165(assets[i].assetAddress).supportsInterface(
-                    type(IERC721).interfaceId
-                )) {
-                    require(recepient.id != 0, "zero token id");
-                    require(
-                        msg.sender == IERC721(assets[i].assetAddress).ownerOf(
-                            recepient.id
-                        ), "caller not token owner"
-                    );
-                }
-                else {
-                    require(recepient.sharePercentBps > 0, "share percentage < 0");
-                    require(recepient.denominator >= 100, "percentage should be in bps");
-                }
+                require(recepient.sharePercentBps > 0, "share percentage < 0");
+                require(recepient.denominator >= 100, "percentage should be in bps");
             }
         }
     }
