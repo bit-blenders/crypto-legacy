@@ -16,6 +16,7 @@ contract  Legacy is ReentrancyGuard {
 
     struct Asset {
         address assetAddress;
+        uint allowance;
         Recepient[] recepients;
     }
 
@@ -34,17 +35,31 @@ contract  Legacy is ReentrancyGuard {
     );
 
     function createWill(Asset[] memory assets, uint32 expiresAt) external nonReentrant {
-        Asset[] storage wills = _wills[msg.sender];
-
-        require(expiresAt > block.timestamp, "expire time too small");
+        require(expiresAt > uint32(block.timestamp), "expire time too small");
         validateAsset(assets);
 
+        Asset[] storage wills = _wills[msg.sender];
         _expiresAt[msg.sender] = expiresAt;
+
         for(uint i = 0; i < assets.length; i++) {
-            wills.push(assets[i]);
+            Recepient[] storage recep = wills[i].recepients;
+            for(uint j = 0; j < assets[i].recepients.length; j++) {
+                Recepient memory rec = assets[i].recepients[j];
+                recep[j] = Recepient({
+                    receiver: rec.receiver,
+                    sharePercentBps: rec.sharePercentBps,
+                    denominator: rec.denominator,
+                    id: rec.id
+                });
+            }
+            wills[i] = Asset({
+                assetAddress: assets[i].assetAddress,
+                allowance: assets[i].allowance,
+                recepients: recep
+            });
         }
 
-        emit WillCreated(msg.sender, uint32(block.timestamp), expiresAt)
+        emit WillCreated(msg.sender, uint32(block.timestamp), expiresAt);
     }
 
     function executeWill(address testator) external nonReentrant {
@@ -72,12 +87,12 @@ contract  Legacy is ReentrancyGuard {
     }
 
     function validateAsset(Asset[] memory assets) internal {
-        for(uint i = 0; i < assets.length) {
+        for(uint i = 0; i < assets.length; i++) {
             require(assets[i].assetAddress != address(0), "zero assets address");
             require(assets[i].assetAddress.code.length > 0, "address not contract");
 
-            for(uint j = 0; j < assets.recepients.length; j++) {
-                Recepient recepient = assets[i].recepients[j];
+            for(uint j = 0; j < assets[i].recepients.length; j++) {
+                Recepient memory recepient = assets[i].recepients[j];
                 require(
                     recepient.receiver != address(0), 
                     "zero recepient address"
@@ -102,13 +117,17 @@ contract  Legacy is ReentrancyGuard {
 
     function _handleERC20Asset(address testator, Asset memory asset) internal {
         uint balance = IERC20(asset.assetAddress).balanceOf(testator);
+        if(balance > asset.allowance) {
+            balance = asset.allowance;
+        }
         for(uint i = 0; i < asset.recepients.length; i++) {
-            uint amount = (balance * asset.allowance[i]) / asset.denominator[i];
+            Recepient memory recep = asset.recepients[i];
+            uint amount = (balance * recep.sharePercentBps) / recep.denominator;
             if(amount > 0) {
                 _handleERC20Transfer(
                     asset.assetAddress, 
                     testator, 
-                    asset.recepients[i], 
+                    recep.receiver, 
                     amount
                 );
             }
@@ -116,12 +135,13 @@ contract  Legacy is ReentrancyGuard {
     }
 
     function _handleERC721Asset(address testator, Asset memory asset) internal {
-        for(uint i = 0; i < asset.ids.length; i++) {
+        for(uint i = 0; i < asset.recepients.length; i++) {
+            Recepient memory recep = asset.recepients[i];
             _handleERC721Transfer(
                 asset.assetAddress, 
-                asset.ids[i], 
+                recep.id, 
                 testator, 
-                asset.recepients[i]
+                recep.receiver
             );
         }
     }
