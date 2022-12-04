@@ -10,6 +10,7 @@ export default function Modal({
   expiryDate,
   currentToken,
   allowanceAmount,
+  approvalCheck,
   setShow,
   setBeneficiaryId,
   setTransferAmount,
@@ -27,7 +28,10 @@ export default function Modal({
         as="div"
         className="relative z-50"
         initialFocus={cancelButtonRef}
-        onClose={() => setCurrentToken({})}
+        onClose={() => {
+          setCurrentToken({});
+          setAllowanceAmount("");
+        }}
       >
         <Transition.Child
           as={Fragment}
@@ -59,70 +63,95 @@ export default function Modal({
                 >
                   <div id="course-wrapper" className="w-full mt-5">
                     <form>
-                      <div className="mb-4">
-                        <label
-                          className="block text-gray-600 text-sm font-bold mb-2"
-                          htmlFor="token-address"
-                        >
-                          Token Address
-                        </label>
-                        <input
-                          className="appearance-none border rounded w-full py-1 text-gray-600 leading-tight focus:outline-none"
-                          id="token-address"
-                          value={currentToken.contract_address}
-                          type="text"
-                          disabled={true}
-                          placeholder="Token Address"
-                        />
-                      </div>
-                      <div className="mb-6">
-                        <label
-                          className="block text-gray-600 text-sm font-bold mb-2"
-                          htmlFor="transfer-amount"
-                        >
-                          How much units you wish to allocate?
-                        </label>
-                        <input
-                          className="appearance-none border rounded w-full py-3 px-3 text-gray-600 leading-tight focus:outline-none"
-                          id="transfer-amount"
-                          value={allowanceAmount}
-                          type="text"
-                          placeholder="Allowance Amount"
-                          onChange={(e) => setAllowanceAmount(e.target.value)}
-                        />
-                      </div>
-                      {/* <div className="mb-6">
-                        <label
-                          className="block text-gray-600 text-sm font-bold mb-2"
-                          htmlFor="expiry-date"
-                        >
-                          When should the beneficiary receive his share?
-                        </label>
-                        <input
-                          className="appearance-none border rounded w-full py-3 px-3 text-gray-600 leading-tight focus:outline-none"
-                          id="expiry-date"
-                          value={expiryDate}
-                          type="text"
-                          placeholder="YYYY-MM-DD"
-                          onChange={(e) => setExpiryDate(e.target.value)}
-                        />
-                      </div> */}
-                      <div className="flex items-center">
-                        <button
-                          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none"
-                          type="button"
-                          onClick={() => handleApprove()}
-                        >
-                          Approve
-                        </button>
-                        {/* <button
-                          className="ml-3 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none"
-                          type="button"
-                          onClick={() => handleAddBeneficiary()}
-                        >
-                          Add Beneficiary
-                        </button> */}
-                      </div>
+                      {!approvalCheck ? (
+                        <>
+                          <div className="mb-6">
+                            <label
+                              className="block text-gray-600 text-sm font-bold mb-2"
+                              htmlFor="beneficiary-id"
+                            >
+                              Who is supposed to receive this?
+                            </label>
+                            <input
+                              className="appearance-none border rounded w-full py-3 px-3 text-gray-600 leading-tight focus:outline-none"
+                              id="beneficiary-id"
+                              value={beneficiaryId}
+                              type="text"
+                              placeholder="Beneficiary ID"
+                              onChange={(e) => setBeneficiaryId(e.target.value)}
+                            />
+                          </div>
+                          <div className="mb-6">
+                            <label
+                              className="block text-gray-600 text-sm font-bold mb-2"
+                              htmlFor="expiry-date"
+                            >
+                              When should the beneficiary receive his share?
+                            </label>
+                            <input
+                              className="appearance-none border rounded w-full py-3 px-3 text-gray-600 leading-tight focus:outline-none"
+                              id="expiry-date"
+                              value={expiryDate}
+                              type="text"
+                              placeholder="YYYY-MM-DD"
+                              onChange={(e) => setExpiryDate(e.target.value)}
+                            />
+                          </div>
+                          <button
+                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none"
+                            type="button"
+                            onClick={() => handleAddBeneficiary()}
+                          >
+                            Add Beneficiary
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="mb-4">
+                            <label
+                              className="block text-gray-600 text-sm font-bold mb-2"
+                              htmlFor="token-address"
+                            >
+                              Token Address
+                            </label>
+                            <input
+                              className="appearance-none border rounded w-full py-1 text-gray-600 leading-tight focus:outline-none"
+                              id="token-address"
+                              value={currentToken.contract_address}
+                              type="text"
+                              disabled={true}
+                              placeholder="Token Address"
+                            />
+                          </div>
+                          <div className="mb-6">
+                            <label
+                              className="block text-gray-600 text-sm font-bold mb-2"
+                              htmlFor="transfer-amount"
+                            >
+                              How much units you wish to allocate?
+                            </label>
+                            <input
+                              className="appearance-none border rounded w-full py-3 px-3 text-gray-600 leading-tight focus:outline-none"
+                              id="transfer-amount"
+                              value={allowanceAmount}
+                              type="text"
+                              placeholder="Allowance Amount"
+                              onChange={(e) =>
+                                setAllowanceAmount(e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center">
+                            <button
+                              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none"
+                              type="button"
+                              onClick={() => handleApprove()}
+                            >
+                              Approve
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </form>
                   </div>
                 </div>
