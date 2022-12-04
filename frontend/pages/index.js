@@ -197,7 +197,7 @@ export default function Home() {
       var total = 0;
       balancesData.items.forEach((item) => {
         var balanceOfItem = parseInt(
-          item.balance.substring(0, item.contract_decimals)
+          ethers.utils.formatEther(item.balance, item.contract_decimals)
         );
         total += balanceOfItem;
       });
@@ -310,17 +310,19 @@ export default function Home() {
                     <div className="flex items-center px-5 py-3">
                       <div className="w-1/2 flex items-center">
                         <div className="w-10 -ml-2">
-                          {item.contract_ticker_symbol != "MET" && (
-                            <img src={item.logo_url} alt="logo_url" />
-                          )}
+                          {item.contract_ticker_symbol != "MET" &&
+                            item.contract_ticker_symbol != "CKIE" && (
+                              <img src={item.logo_url} alt="logo_url" />
+                            )}
                         </div>
                         <div className="ml-1">{item.contract_name}</div>
                       </div>
                       <div className="w-1/3">${item.quote}</div>
                       <div className="w-1/3">
-                        {ethers.utils
-                          .formatEther(item.balance, item.contract_decimals)
-                          .substring(0, 4)}
+                        {ethers.utils.formatEther(
+                          item.balance,
+                          item.contract_decimals
+                        )}
                       </div>
                       <div className="w-1/3">
                         {!item.native_token ? (
