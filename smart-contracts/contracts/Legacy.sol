@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -6,6 +6,23 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+interface ILegacy {
+    struct Recepient {
+        address receiver;
+        uint8 sharePercentBps;
+        uint denominator;
+        uint id;
+    }
+    struct Asset {
+        address assetAddress;
+        uint8 assetType;
+        uint32 expiresAt;
+        uint allowance;
+        Recepient[] recepients;
+    }
+    function createWill(Asset memory asset) external;
+    function executeWill(address testator, address assetAddress) external;
+}
 contract  Legacy is ReentrancyGuard {
     struct Recepient {
         address receiver;
@@ -16,32 +33,43 @@ contract  Legacy is ReentrancyGuard {
 
     struct Asset {
         address assetAddress;
+        uint8 assetType;
         uint32 expiresAt;
         uint allowance;
         Recepient[] recepients;
     }
 
-    mapping(address => mapping(address => Asset)) private _wills;
+    mapping(address => mapping(address => Asset)) public wills;
     // mapping(address => uint32) private _expiresAt;
 
     event WillCreated(
         address indexed testator, 
         address assestAddress,
+        uint8 assetType,
         uint32 createdAt, 
         uint32 expiresAt
     );
     event WillExecuted(
         address indexed testator, 
         address assetAddress,
+        uint8 assetType,
         uint32 expiresAt,
         uint32 executedAt
     );
-
+    event UpdatedExpiresAt(
+        address indexed testator, 
+        address assetAddress,
+        uint32 expiresAt
+    );
+    event WillDeleted(
+        address indexed testator, 
+        address assetAddress
+    );
     function createWill(Asset memory asset) external nonReentrant {
         require(asset.expiresAt > uint32(block.timestamp), "expire time too small");
         validateAsset(asset);
 
-        Asset storage will = _wills[msg.sender][asset.assetAddress];
+        Asset storage will = wills[msg.sender][asset.assetAddress];
         for(uint j = 0; j < asset.recepients.length; j++) {
             will.recepients.push(Recepient({
                 receiver: asset.recepients[j].receiver,
@@ -54,13 +82,13 @@ contract  Legacy is ReentrancyGuard {
         will.expiresAt = asset.expiresAt;
         will.allowance = asset.allowance;
         
-        emit WillCreated(msg.sender, asset.assetAddress,uint32(block.timestamp), asset.expiresAt);
+        emit WillCreated(msg.sender, asset.assetAddress, asset.assetType, uint32(block.timestamp), asset.expiresAt);
     }
 
     function executeWill(address testator, address assetAddress) external nonReentrant {
-        Asset memory will = _wills[testator][assetAddress];
+        Asset memory will = wills[testator][assetAddress];
 
-
+        require(will.expiresAt <= block.timestamp,"Too early");
         if(
             IERC165(will.assetAddress).supportsInterface(
                 type(IERC721).interfaceId
@@ -72,9 +100,30 @@ contract  Legacy is ReentrancyGuard {
             _handleERC20Asset(testator, will);
         }
 
-        delete _wills[testator][assetAddress];
+        delete wills[testator][assetAddress];
 
-        emit WillExecuted(testator, assetAddress,uint32(block.timestamp), will.expiresAt);
+        emit WillExecuted(testator, assetAddress, will.assetType, uint32(block.timestamp), will.expiresAt);
+    }
+
+    function updateExpiresAt(address assetAddress, uint32 expiresAt) external nonReentrant {
+        Asset storage asset = wills[msg.sender][assetAddress];
+        
+        require(asset.assetAddress == assetAddress, "will dose not exist");
+        require(expiresAt > uint32(block.timestamp), "expire time too small");
+
+        asset.expiresAt = expiresAt;
+
+        emit UpdatedExpiresAt(msg.sender, assetAddress, expiresAt);
+    }
+
+    function deleteWill(address assetAddress) external nonReentrant {
+        Asset memory asset = wills[msg.sender][assetAddress];
+        
+        require(asset.assetAddress == assetAddress, "will dose not exist");
+
+        delete wills[msg.sender][assetAddress];
+
+        emit WillDeleted(msg.sender, assetAddress);
     }
 
     function validateAsset(Asset memory asset) internal view {
@@ -88,9 +137,7 @@ contract  Legacy is ReentrancyGuard {
                 recepient.receiver != address(0), 
                 "zero recepient address"
             );
-            if(IERC165(asset.assetAddress).supportsInterface(
-                type(IERC721).interfaceId
-            )) {
+            if(asset.assetType == 1) {
                 require(recepient.id != 0, "zero token id");
                 require(
                     msg.sender == IERC721(asset.assetAddress).ownerOf(
